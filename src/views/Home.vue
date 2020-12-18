@@ -14,7 +14,6 @@
     name: 'home',
     setup() {
       let app,
-        explorerHit,
         blobs = [],
         treasure,
         door,
@@ -22,7 +21,9 @@
         gameScene,
         gameOverScene,
         message,
-        state
+        state,
+        healthBar
+
       //Aliases
       const Application = PIXI.Application,
         Container = PIXI.Container,
@@ -96,6 +97,7 @@
           sprite.x = container.x
           collision = 'left'
         }
+        // top
         if (sprite.y < container.y) {
           sprite.y = container.y
           collision = 'top'
@@ -107,7 +109,7 @@
         }
         // bottom
         if (sprite.y + sprite.height > container.height) {
-          sprite.x = container.height - sprite.height
+          sprite.y = container.height - sprite.height
           collision = 'bottom'
         }
 
@@ -125,15 +127,37 @@
         key.downHandler = function (event) {
           if (event.keyCode === key.code) {
             if (key.isUp && key.press) key.press()
+            key.isDown = true
+            key.isUp = false
           }
+          event.preventDefault();
         }
+        key.upHandler = function (event) {
+          if (event.keyCode === key.code) {
+            if (key.isDown && key.release) key.release()
+          }
+          key.isUp = true;
+          key.isDown = false;
+          event.preventDefault();
+        }
+
+
+        window.addEventListener('keydown', key.downHandler.bind(key), false)
+        window.addEventListener('keyup', key.upHandler.bind(key), false)
+        return key;
       }
 
       // 游戏ing
       function play() {
+        let explorerHit = false;
+        explorer.x += explorer.vx;
+        explorer.y += explorer.vy;
+
+        contain(explorer, {x: 28, y: 10, width: 488, height: 480});
+
         blobs.forEach((blob) => {
-          blob.y += blob.vy
-          let blockHitWall = contain(blob, {x: 28, y: 10, width: 488, height: 400});
+          blob.y += blob.vy;
+          let blockHitWall = contain(blob, {x: 28, y: 10, width: 488, height: 480});
 
           if (blockHitWall === 'top' || blockHitWall === 'bottom') {
             blob.vy *= -1;
@@ -142,14 +166,34 @@
           if (hitTestRectangle(explorer, blob)) {
             explorerHit = true
           }
+
+
         })
 
+        if (explorerHit) {
+          explorer.alpha = 0.5
+          healthBar.outer.width -= 1;
+        } else {
+          explorer.alpha = 1
+        }
+
+        if (hitTestRectangle(explorer, treasure)) {
+          treasure.x = explorer.x + 8;
+          treasure.y = explorer.y + 8;
+        }
+
+        if (healthBar.outer.width < 0) {
+          state = end;
+          message.text = "You lost!";
+        }
         if (hitTestRectangle(treasure, door)) {
           state = end;
-          message.text = "you lost"
+          message.text = "you won!"
         }
 
         // 移动探险者
+        // explorer.x += explorer.vx;
+        // explorer.y += explorer.vy;
 
 
       }
@@ -191,6 +235,7 @@
 
         let numberOfBlobs = 6, spacing = 48, xOffset = 150, speed = 2, direction = 1
 
+        blobs = []
 
         for (let i = 0; i < numberOfBlobs; i++) {
           let blob = new Sprite(id['blob.png'])
@@ -199,14 +244,91 @@
 
           blob.x = x
           blob.y = y
-          // @ts-ignore
+
           blob.vy = speed * direction
           direction *= -1
           blobs.push(blob)
           gameScene.addChild(blob)
         }
 
-        let left = keyboard(37)
+        // 制作血条
+        healthBar = new PIXI.Container()
+        healthBar.position.set(app.stage.width - 170, 4)
+        gameScene.addChild(healthBar)
+
+
+        const innerBar = new PIXI.Graphics();
+        innerBar.beginFill(0x000000)
+        innerBar.drawRect(0, 0, 128, 8);
+        innerBar.endFill();
+        healthBar.addChild(innerBar)
+
+        const outerBar = new PIXI.Graphics();
+        outerBar.beginFill(0xFF3300);
+        outerBar.drawRect(0, 0, 128, 8)
+        outerBar.endFill();
+        healthBar.addChild(outerBar);
+        healthBar.outer = outerBar
+
+        // 制作消息条
+
+        let style = new TextStyle({
+          fontFamily: 'Futura',
+          fontSize: 64,
+          fill: "white"
+        })
+        message = new Text('the end!', style);
+        message.x = 120
+        message.y = app.stage.height / 2 - 32
+        gameOverScene.addChild(message)
+
+        // 键盘事件
+        let left = keyboard(37),
+          up = keyboard(38),
+          right = keyboard(39),
+          down = keyboard(40)
+
+        left.press = function () {
+          explorer.vx = -5
+          explorer.vy = 0
+        }
+        left.release = function () {
+          if (!right.isDown && explorer.vy === 0) {
+            explorer.vx = 0;
+          }
+        }
+        //Up
+        up.press = function() {
+          explorer.vy = -5;
+          explorer.vx = 0;
+        };
+        up.release = function() {
+          if (!down.isDown && explorer.vx === 0) {
+            explorer.vy = 0;
+          }
+        };
+
+        //Right
+        right.press = function() {
+          explorer.vx = 5;
+          explorer.vy = 0;
+        };
+        right.release = function() {
+          if (!left.isDown && explorer.vy === 0) {
+            explorer.vx = 0;
+          }
+        };
+
+        //Down
+        down.press = function() {
+          explorer.vy = 5;
+          explorer.vx = 0;
+        };
+        down.release = function() {
+          if (!up.isDown && explorer.vx === 0) {
+            explorer.vy = 0;
+          }
+        };
 
         state = play
         // 游戏循环：
